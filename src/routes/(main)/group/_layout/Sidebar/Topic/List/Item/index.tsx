@@ -208,6 +208,7 @@ const TopicItem = memo<TopicItemProps>(({ id, title, fav, active, threadId }) =>
         contextMenuItems={dropdownMenu}
         disabled={editing}
         href={!editing ? href : undefined}
+        title={title === '...' ? <DotsLoading gap={3} size={4} /> : title}
         icon={
           isLoading ? (
             <Icon spin icon={Loader2Icon} size={'small'} style={{ color: cssVar.colorWarning }} />
@@ -218,7 +219,6 @@ const TopicItem = memo<TopicItemProps>(({ id, title, fav, active, threadId }) =>
         slots={{
           iconPostfix: unreadNode,
         }}
-        title={title === '...' ? <DotsLoading gap={3} size={4} /> : title}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
       />
