@@ -104,7 +104,7 @@ const TopicItem = memo<TopicItemProps>(({ id, title, fav, active, threadId, meta
     id ? operationSelectors.isTopicUnreadCompleted(id) : () => false,
   );
 
-  const { navigateToTopic, isInAgentSubRoute } = useTopicNavigation();
+  const { focusTopicPopup, navigateToTopic, isInAgentSubRoute } = useTopicNavigation();
 
   const toggleEditing = useCallback(
     (visible?: boolean) => {
@@ -120,25 +120,29 @@ const TopicItem = memo<TopicItemProps>(({ id, title, fav, active, threadId, meta
     if (isDesktop) {
       clickTimerRef.current = setTimeout(() => {
         clickTimerRef.current = null;
-        navigateToTopic(id);
+        void navigateToTopic(id);
       }, 250);
     } else {
-      navigateToTopic(id);
+      void navigateToTopic(id);
     }
   }, [editing, id, navigateToTopic]);
 
-  const handleDoubleClick = useCallback(() => {
+  const handleDoubleClick = useCallback(async () => {
     if (!id || !activeAgentId || !isDesktop) return;
     if (clickTimerRef.current) {
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
     }
+    if (await focusTopicPopup(id)) {
+      void navigateToTopic(id, { skipPopupFocus: true });
+      return;
+    }
     const reference = pluginRegistry.parseUrl(`/agent/${activeAgentId}`, `topic=${id}`);
     if (reference) {
       addTab(reference);
-      navigateToTopic(id);
+      void navigateToTopic(id);
     }
-  }, [id, activeAgentId, addTab, navigateToTopic]);
+  }, [id, activeAgentId, addTab, focusTopicPopup, navigateToTopic]);
 
   const { dropdownMenu } = useTopicItemDropdownMenu({
     fav,
@@ -220,7 +224,7 @@ const TopicItem = memo<TopicItemProps>(({ id, title, fav, active, threadId, meta
           );
         })()}
         onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+        onDoubleClick={() => void handleDoubleClick()}
       />
       <Editing id={id} title={title} toggleEditing={toggleEditing} />
       {active && (
