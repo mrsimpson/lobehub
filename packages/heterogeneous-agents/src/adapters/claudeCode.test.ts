@@ -269,7 +269,12 @@ describe('ClaudeCodeAdapter', () => {
   });
 
   describe('usage and model extraction', () => {
-    it('emits step_complete with turn_metadata when message has model and usage', () => {
+    // Under `--include-partial-messages` (our preset default), CC emits a
+    // stale `message_start.usage` snapshot (e.g. `output_tokens: 8`) that it
+    // echoes verbatim on every content-block `assistant` event. The
+    // authoritative per-turn total only arrives later as `message_delta`.
+    // So turn_metadata emission is wired to `message_delta`, not `assistant`.
+    it('does NOT emit turn_metadata on assistant events (usage there is stale)', () => {
       const adapter = new ClaudeCodeAdapter();
       adapter.adapt({ subtype: 'init', type: 'system' });
 
@@ -278,9 +283,36 @@ describe('ClaudeCodeAdapter', () => {
           id: 'msg_1',
           content: [{ text: 'hello', type: 'text' }],
           model: 'claude-sonnet-4-6',
-          usage: { input_tokens: 100, output_tokens: 50 },
+          usage: { input_tokens: 100, output_tokens: 1 }, // stale placeholder
         },
         type: 'assistant',
+      });
+
+      expect(
+        events.find((e) => e.type === 'step_complete' && e.data?.phase === 'turn_metadata'),
+      ).toBeUndefined();
+    });
+
+    it('emits turn_metadata on message_delta with authoritative usage', () => {
+      const adapter = new ClaudeCodeAdapter();
+      adapter.adapt({ subtype: 'init', type: 'system' });
+
+      // stream_event:message_start primes the current message id + model
+      adapter.adapt({
+        event: {
+          message: { id: 'msg_1', model: 'claude-sonnet-4-6' },
+          type: 'message_start',
+        },
+        type: 'stream_event',
+      });
+
+      // message_delta carries the final per-turn usage
+      const events = adapter.adapt({
+        event: {
+          type: 'message_delta',
+          usage: { input_tokens: 100, output_tokens: 50 },
+        },
+        type: 'stream_event',
       });
 
       const meta = events.find(
@@ -288,19 +320,32 @@ describe('ClaudeCodeAdapter', () => {
       );
       expect(meta).toBeDefined();
       expect(meta!.data.model).toBe('claude-sonnet-4-6');
-      expect(meta!.data.usage.input_tokens).toBe(100);
-      expect(meta!.data.usage.output_tokens).toBe(50);
+      expect(meta!.data.provider).toBe('claude-code');
+      expect(meta!.data.usage).toEqual({
+        inputCacheMissTokens: 100,
+        inputCachedTokens: undefined,
+        inputWriteCacheTokens: undefined,
+        totalInputTokens: 100,
+        totalOutputTokens: 50,
+        totalTokens: 150,
+      });
     });
 
-    it('emits step_complete with cache token usage', () => {
+    it('normalizes cache creation and cache read from message_delta usage', () => {
       const adapter = new ClaudeCodeAdapter();
       adapter.adapt({ subtype: 'init', type: 'system' });
 
+      adapter.adapt({
+        event: {
+          message: { id: 'msg_1', model: 'claude-sonnet-4-6' },
+          type: 'message_start',
+        },
+        type: 'stream_event',
+      });
+
       const events = adapter.adapt({
-        message: {
-          id: 'msg_1',
-          content: [{ text: 'hi', type: 'text' }],
-          model: 'claude-sonnet-4-6',
+        event: {
+          type: 'message_delta',
           usage: {
             cache_creation_input_tokens: 200,
             cache_read_input_tokens: 300,
@@ -308,14 +353,54 @@ describe('ClaudeCodeAdapter', () => {
             output_tokens: 50,
           },
         },
-        type: 'assistant',
+        type: 'stream_event',
       });
 
       const meta = events.find(
         (e) => e.type === 'step_complete' && e.data?.phase === 'turn_metadata',
       );
-      expect(meta!.data.usage.cache_creation_input_tokens).toBe(200);
-      expect(meta!.data.usage.cache_read_input_tokens).toBe(300);
+      expect(meta!.data.usage).toEqual({
+        inputCacheMissTokens: 100,
+        inputCachedTokens: 300,
+        inputWriteCacheTokens: 200,
+        totalInputTokens: 600,
+        totalOutputTokens: 50,
+        totalTokens: 650,
+      });
+    });
+
+    it('uses model from the latest assistant event when message_start lacks one', () => {
+      // Non-partial edge case: no message_start carries model, but assistant
+      // events always do. The adapter should still attach the right model.
+      const adapter = new ClaudeCodeAdapter();
+      adapter.adapt({ subtype: 'init', type: 'system' });
+
+      adapter.adapt({
+        event: { message: { id: 'msg_1' }, type: 'message_start' },
+        type: 'stream_event',
+      });
+      adapter.adapt({
+        message: {
+          id: 'msg_1',
+          content: [{ text: 'hi', type: 'text' }],
+          model: 'claude-opus-4-7',
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+        type: 'assistant',
+      });
+
+      const events = adapter.adapt({
+        event: {
+          type: 'message_delta',
+          usage: { input_tokens: 10, output_tokens: 100 },
+        },
+        type: 'stream_event',
+      });
+
+      const meta = events.find(
+        (e) => e.type === 'step_complete' && e.data?.phase === 'turn_metadata',
+      );
+      expect(meta!.data.model).toBe('claude-opus-4-7');
     });
   });
 

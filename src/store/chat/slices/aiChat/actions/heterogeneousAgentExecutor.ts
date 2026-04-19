@@ -297,14 +297,10 @@ export const executeHeterogeneousAgent = async (
   /** Content accumulators — reset on each new step */
   let accumulatedContent = '';
   let accumulatedReasoning = '';
-  /** Extracted model + usage from each assistant event (used for final write) */
+  /** Latest model string — updated per turn, written alongside content on step boundaries. */
   let lastModel: string | undefined;
-  const accumulatedUsage: Record<string, number> = {
-    cache_creation_input_tokens: 0,
-    cache_read_input_tokens: 0,
-    input_tokens: 0,
-    output_tokens: 0,
-  };
+  /** Adapter/CLI provider (e.g. `claude-code`) — carried on every turn_metadata. */
+  let lastProvider: string | undefined;
   /**
    * Deferred terminal event (agent_runtime_end or error). We don't forward
    * these to the gateway handler immediately because handler triggers
@@ -384,31 +380,32 @@ export const executeHeterogeneousAgent = async (
             continue;
           }
 
-          // ─── step_complete with result_usage: authoritative total from CC result event ───
-          if (event.type === 'step_complete' && event.data?.phase === 'result_usage') {
-            if (event.data.usage) {
-              // Override (not accumulate) — result event has the correct totals
-              accumulatedUsage.input_tokens = event.data.usage.input_tokens || 0;
-              accumulatedUsage.output_tokens = event.data.usage.output_tokens || 0;
-              accumulatedUsage.cache_creation_input_tokens =
-                event.data.usage.cache_creation_input_tokens || 0;
-              accumulatedUsage.cache_read_input_tokens =
-                event.data.usage.cache_read_input_tokens || 0;
-            }
-            continue;
-          }
-
-          // ─── step_complete with turn_metadata: capture model + usage ───
+          // ─── step_complete with turn_metadata: persist per-step usage ───
+          // `turn_metadata.usage` is the per-turn delta (deduped by adapter per
+          // message.id) and already normalized to the MessageMetadata.usage
+          // shape — write it straight through to the current step's assistant
+          // message. Queue the write so it lands after any in-flight
+          // stream_start(newStep) that may still be swapping
+          // `currentAssistantMessageId` to the new step's message.
+          //
+          // `result_usage` (grand total across all turns) is intentionally
+          // ignored — applying it would overwrite the last step with the sum
+          // of all prior steps. Sum of turn_metadata equals result_usage for
+          // a healthy run.
           if (event.type === 'step_complete' && event.data?.phase === 'turn_metadata') {
             if (event.data.model) lastModel = event.data.model;
-            if (event.data.usage) {
-              // Accumulate token usage across turns (deduped by adapter per message.id)
-              accumulatedUsage.input_tokens += event.data.usage.input_tokens || 0;
-              accumulatedUsage.output_tokens += event.data.usage.output_tokens || 0;
-              accumulatedUsage.cache_creation_input_tokens +=
-                event.data.usage.cache_creation_input_tokens || 0;
-              accumulatedUsage.cache_read_input_tokens +=
-                event.data.usage.cache_read_input_tokens || 0;
+            if (event.data.provider) lastProvider = event.data.provider;
+            const turnUsage = event.data.usage;
+            if (turnUsage) {
+              persistQueue = persistQueue.then(async () => {
+                await messageService
+                  .updateMessage(
+                    currentAssistantMessageId,
+                    { metadata: { usage: turnUsage } },
+                    { agentId: context.agentId, topicId: context.topicId },
+                  )
+                  .catch(console.error);
+              });
             }
             // Don't forward turn metadata — it's internal bookkeeping
             continue;
@@ -423,6 +420,7 @@ export const executeHeterogeneousAgent = async (
             const prevContent = accumulatedContent;
             const prevReasoning = accumulatedReasoning;
             const prevModel = lastModel;
+            const prevProvider = lastProvider;
 
             // Reset content accumulators synchronously so new-step chunks go to fresh state
             accumulatedContent = '';
@@ -440,6 +438,7 @@ export const executeHeterogeneousAgent = async (
               if (prevContent) prevUpdate.content = prevContent;
               if (prevReasoning) prevUpdate.reasoning = { content: prevReasoning };
               if (prevModel) prevUpdate.model = prevModel;
+              if (prevProvider) prevUpdate.provider = prevProvider;
               if (Object.keys(prevUpdate).length > 0) {
                 await messageService
                   .updateMessage(currentAssistantMessageId, prevUpdate, {
@@ -462,6 +461,7 @@ export const executeHeterogeneousAgent = async (
                 content: '',
                 model: lastModel,
                 parentId: stepParentId,
+                provider: lastProvider,
                 role: 'assistant',
                 topicId: context.topicId ?? undefined,
               });
@@ -547,33 +547,14 @@ export const executeHeterogeneousAgent = async (
         // Wait for all tool persistence to finish before writing final state
         await persistQueue.catch(console.error);
 
-        // Persist final content + reasoning + model + usage to the assistant message
-        // BEFORE the terminal event triggers fetchAndReplaceMessages.
+        // Persist final content + reasoning + model for the last step BEFORE the
+        // terminal event triggers fetchAndReplaceMessages. Usage for this step
+        // was already written per-turn via the turn_metadata branch.
         const updateValue: Record<string, any> = {};
         if (accumulatedContent) updateValue.content = accumulatedContent;
         if (accumulatedReasoning) updateValue.reasoning = { content: accumulatedReasoning };
         if (lastModel) updateValue.model = lastModel;
-        const inputCacheMiss = accumulatedUsage.input_tokens;
-        const inputCached = accumulatedUsage.cache_read_input_tokens;
-        const inputWriteCache = accumulatedUsage.cache_creation_input_tokens;
-        const totalInputTokens = inputCacheMiss + inputCached + inputWriteCache;
-        const totalOutputTokens = accumulatedUsage.output_tokens;
-
-        if (totalInputTokens + totalOutputTokens > 0) {
-          updateValue.metadata = {
-            // Use nested `usage` — the flat fields on MessageMetadata are deprecated.
-            // Shape mirrors the anthropic usage converter so CC CLI and Gateway turns
-            // render identically in pricing/usage UI.
-            usage: {
-              inputCacheMissTokens: inputCacheMiss,
-              inputCachedTokens: inputCached || undefined,
-              inputWriteCacheTokens: inputWriteCache || undefined,
-              totalInputTokens,
-              totalOutputTokens,
-              totalTokens: totalInputTokens + totalOutputTokens,
-            },
-          };
-        }
+        if (lastProvider) updateValue.provider = lastProvider;
 
         if (Object.keys(updateValue).length > 0) {
           await messageService
