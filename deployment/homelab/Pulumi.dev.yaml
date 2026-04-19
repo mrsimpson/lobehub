@@ -1,0 +1,20 @@
+config:
+  lobehub:homelabStack: mrsimpson/homelab/dev
+
+  # Image reference — updated by build-lobehub-image.yml after each successful build on main.
+  lobehub:lobehubImage: ghcr.io/mrsimpson/lobehub:latest
+
+  # Optional: persistent volume size for uploads (default 2Gi).
+  lobehub:storageSize: 2Gi
+
+  # ---------------------------------------------------------------------------
+  # Secrets — populate with `pulumi config set lobehub:<key> <value> --secret`
+  # ---------------------------------------------------------------------------
+  # lobehub:databaseUrl:     postgres://user:pass@host:5432/lobehub
+  # lobehub:authSecret:      <openssl rand -base64 32>
+  # lobehub:keyVaultsSecret: <openssl rand -base64 32>
+  # lobehub:openaiApiKey:    sk-...
+  # lobehub:openrouterApiKey: sk-or-...
+  # lobehub:anthropicApiKey: sk-ant-...
+  # lobehub:authGoogleId:    <google-oauth-client-id>
+  # lobehub:authGoogleSecret: <google-oauth-client-secret>
