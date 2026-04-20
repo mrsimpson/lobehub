@@ -1,31 +1,11 @@
 config:
   lobehub:homelabStack: mrsimpson/homelab/dev
-
   # Image reference — updated by build-lobehub-image.yml after each successful build on main.
   lobehub:lobehubImage: ghcr.io/mrsimpson/lobehub:latest
-
-  # Optional: persistent volume sizes (defaults shown).
+  # Optional: persistent volume size for uploads (default 2Gi).
   lobehub:storageSize: 2Gi
   lobehub:databaseStorageSize: 10Gi
-
-  # ---------------------------------------------------------------------------
-  # Database
-  # ---------------------------------------------------------------------------
-  # By default a single-replica paradedb (Postgres 17 + pgvector) StatefulSet
-  # is deployed into the lobehub namespace with an auto-generated password.
-  # To use an external DB instead, set lobehub:databaseUrl as a secret:
-  # pulumi config set lobehub:databaseUrl "postgres://..." --secret
-
-  # ---------------------------------------------------------------------------
-  # Secrets — populate with `pulumi config set lobehub:<key> <value> --secret`
-  # ---------------------------------------------------------------------------
-  # Required:
-  # lobehub:authSecret:      <openssl rand -base64 32>
-  # lobehub:keyVaultsSecret: <openssl rand -base64 32>
-  #
-  # Optional provider keys:
-  # lobehub:openaiApiKey:    sk-...
-  # lobehub:openrouterApiKey: sk-or-...
-  # lobehub:anthropicApiKey: sk-ant-...
-  # lobehub:authGoogleId:    <google-oauth-client-id>
-  # lobehub:authGoogleSecret: <google-oauth-client-secret>
+  lobehub:authSecret:
+    secure: AAABADAcrWAOE+16IwkAyT9Z5/tViEYBvqV7gSrm2Hfhn6HJFrVhePMWKaSkQAu56C/U7v6QQvkArsSVTjnL5Kcsqfo7MEwaqtyRDg==
+  lobehub:keyVaultsSecret:
+    secure: AAABALq0pblhWcxsE7wpTPRa7+gKFXTUb1EllykoJ84TDJ1dCFRPn7gQpX1VeFa8A2nQfiy+0MIKyOx0fX7kPicKdPyPpRP94GuwZA==
