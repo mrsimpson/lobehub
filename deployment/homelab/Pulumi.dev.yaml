@@ -4,15 +4,26 @@ config:
   # Image reference — updated by build-lobehub-image.yml after each successful build on main.
   lobehub:lobehubImage: ghcr.io/mrsimpson/lobehub:latest
 
-  # Optional: persistent volume size for uploads (default 2Gi).
+  # Optional: persistent volume sizes (defaults shown).
   lobehub:storageSize: 2Gi
+  lobehub:databaseStorageSize: 10Gi
+
+  # ---------------------------------------------------------------------------
+  # Database
+  # ---------------------------------------------------------------------------
+  # By default a single-replica paradedb (Postgres 17 + pgvector) StatefulSet
+  # is deployed into the lobehub namespace with an auto-generated password.
+  # To use an external DB instead, set lobehub:databaseUrl as a secret:
+  # pulumi config set lobehub:databaseUrl "postgres://..." --secret
 
   # ---------------------------------------------------------------------------
   # Secrets — populate with `pulumi config set lobehub:<key> <value> --secret`
   # ---------------------------------------------------------------------------
-  # lobehub:databaseUrl:     postgres://user:pass@host:5432/lobehub
+  # Required:
   # lobehub:authSecret:      <openssl rand -base64 32>
   # lobehub:keyVaultsSecret: <openssl rand -base64 32>
+  #
+  # Optional provider keys:
   # lobehub:openaiApiKey:    sk-...
   # lobehub:openrouterApiKey: sk-or-...
   # lobehub:anthropicApiKey: sk-ant-...
