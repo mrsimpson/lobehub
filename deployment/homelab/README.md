@@ -108,6 +108,20 @@ Images are built and pushed automatically by GitHub Actions:
 
 - [`build-lobehub-image.yml`](../../.github/workflows/build-lobehub-image.yml) — triggers on changes under `deployment/homelab/images/lobehub/` or when `.base-version` changes. Builds the fork image, pushes to GHCR, and updates `Pulumi.dev.yaml` with the new tag.
 - [`deploy-homelab.yml`](../../.github/workflows/deploy-homelab.yml) — runs `pulumi up` after `Pulumi.dev.yaml` changes or an image build succeeds.
+- [`fork-validate.yml`](../../.github/workflows/fork-validate.yml) — guard workflow. Fails any PR that modifies upstream-owned paths, so this fork stays conflict-free when pulling from upstream lobehub.
+
+## Fork-owned vs upstream-owned paths
+
+Only touch **fork-owned** paths from PRs targeting this fork. Upstream lobehub owns everything else; modifying it produces merge conflicts on the next upstream pull.
+
+**Fork-owned:**
+
+- `deployment/**`
+- `.github/workflows/build-lobehub-image.yml`
+- `.github/workflows/deploy-homelab.yml`
+- `.github/workflows/fork-validate.yml`
+
+If a change genuinely has to touch upstream files, branch from `upstream-merge/...` — the guard skips that prefix.
 
 ## Upstream base tracking
 
