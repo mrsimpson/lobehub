@@ -123,6 +123,18 @@ Only touch **fork-owned** paths from PRs targeting this fork. Upstream lobehub o
 
 If a change genuinely has to touch upstream files, branch from `upstream-merge/...` — the guard skips that prefix.
 
+## Disabling upstream workflows
+
+`fork-validate.yml` blocks *file-level* edits to upstream workflows, but the upstream workflows themselves will still *run* in this fork (usually failing on missing secrets, producing noise). To silence them without modifying any files (so no merge conflicts), disable them through the Actions API:
+
+```bash
+deployment/homelab/scripts/disable-upstream-workflows.sh
+# or for a different fork:
+deployment/homelab/scripts/disable-upstream-workflows.sh --repo other-org/lobehub-fork
+```
+
+The script is idempotent and leaves the three fork-owned workflows enabled. Disabled state persists across upstream merges; re-run after a large upstream pull if it introduced brand-new workflow files.
+
 ## Upstream base tracking
 
 The upstream image tag is pinned in [`images/lobehub/.base-version`](./images/lobehub/.base-version). Bump it to adopt a new upstream release:
