@@ -5,22 +5,13 @@ description: "Version release workflow. Use when the user mentions 'release', 'h
 
 # Version Release Workflow
 
-## Scope Boundary (Important)
-
-This skill is only for:
-
-1. Release branch / PR workflow
-2. CI trigger constraints (`auto-tag-release.yml`)
-3. GitHub Release note writing
-
-This skill is **not** for writing `docs/changelog/*.mdx`.\
-If the user asks for website changelog pages, load `../docs-changelog/SKILL.md`.
-
 ## Mandatory Companion Skill
 
 For every `/version-release` execution, you MUST load and apply:
 
 - `../microcopy/SKILL.md`
+
+Changelog style guidance is now fully embedded in this skill. Keep release facts unchanged, and only improve structure, readability, and tone.
 
 ## Overview
 
@@ -168,151 +159,187 @@ Do not use this as `docs/changelog` page guidance.
 
 This release-note style is:
 
-1. **Data-backed at the top** (date, range, key metrics)
-2. **Narrative first, then structured detail**
-3. **Deep but scannable** (clear sectioning + compact bullets)
-4. **Contributor-forward** (credits are part of the release story)
+### Mandatory Inputs Before Writing
 
-### Required Inputs Before Writing
+1. Release diff context (`git log main..canary` and/or `git diff main...canary --stat`)
+2. Existing release template constraints (title, credits, trigger rules)
+3. `../microcopy/SKILL.md` terminology constraints
 
-Collect these inputs first:
+### Output Constraints (Hard Rules)
 
-1. Compare range (`<prev_tag>...<current_tag>`)
-2. Release metrics (commits, merged PRs, resolved issues, contributors, optional files/insertions/deletions)
-3. High-impact changes by domain (core loop, platform/gateway, UX, tooling, security, reliability)
-4. Contributor list (with standout contributions if known)
-5. Known risks / migrations / rollout notes (if any)
+1. Keep all factual claims accurate to merged changes.
+2. Do not invent numbers, scope, timelines, or availability tiers.
+3. Keep release title and trigger-sensitive format unchanged.
+4. Keep `Credits` section intact (format required by project conventions).
+5. Prefer fewer headings and more natural narrative paragraphs.
+6. EN/ZH versions must cover the same facts in the same order.
+7. Prefer storytelling over feature enumeration.
+8. Avoid `Key Updates` sections that are only bullet dumps unless explicitly requested.
 
-If metrics cannot be reliably computed, omit unknown numbers instead of guessing.
+### Editorial Voice (Notion/Linear-Inspired)
 
-### Canonical Structure
+Target a changelog voice that is calm, confident, and human:
 
-Follow this section order unless the user asks otherwise:
+- Start from user reality, not internal implementation.
+- Explain why this change matters before listing mechanics.
+- Keep tone practical and grounded, but allow a little product warmth.
+- Favor concrete workflow examples over abstract claims.
+- Write like an update from a thoughtful product team, not a marketing launch page.
 
-1. `# 🚀 LobeHub v<x.y.z> (<YYYYMMDD>)`
-2. Metadata lines:
-   - `Release Date`
-   - `Since <Previous Version>` metrics
-3. One quoted release thesis (single paragraph, 1-2 lines)
-4. `## ✨ Highlights` (6-12 bullets for major releases; 3-8 for weekly)
-5. Domain blocks with optional `###` subsections:
-   - `## 🏗️ Core Agent & Architecture` (or equivalent product core)
-   - `## 📱 Platforms / Integrations`
-   - `## 🖥️ CLI & User Experience`
-   - `## 🔧 Tooling`
-   - `## 🔒 Security & Reliability`
-   - `## 📚 Documentation` (optional if meaningful)
-6. `## 👥 Contributors`
-7. `**Full Changelog**: <prev>...<current>`
+### Writing Model (3-Pass Rewrite)
 
-Use `---` separators between major blocks for long releases.
+#### Pass 1: Remove AI Vocabulary and Filler
 
-### Writing Rules (Hard)
+- Replace inflated words with simple alternatives.
+- Remove transition padding like "furthermore", "notably", "it is worth noting that".
+- Cut generic importance inflation ("pivotal", "testament", "game-changer").
+- Prefer direct verbs like `run`, `customize`, `manage`, `capture`, `improve`, `fix`.
 
-1. **No fabricated metrics**: all numbers must be traceable.
-2. **No vague headline bullets**: each bullet must include capability + impact.
-3. **No internal-only framing**: phrase from user/operator perspective.
-4. **Security must be explicit** when security-sensitive fixes are present.
-5. **PR/issue linkage**: use `(#1234)` when IDs are available.
-6. **Terminology consistency**: same feature/provider name across sections.
-7. **Do not bury migration or breaking changes**: elevate to dedicated section or callout.
+#### Pass 2: Break AI Sentence Patterns
 
-### Style Rules (Long-Form)
+Avoid these structures:
 
-1. Start with an "everyday use" framing, not implementation internals.
-2. Mix narrative sentence + evidence bullets.
-3. Keep bullets compact but informative:
-   - Good: `**Fast Mode (`/fast`)** — Priority routing for OpenAI and Anthropic, reducing latency on supported models. (#6875, #6960)`
-4. Use bold only for capability names, not for whole sentences.
-5. Keep heading depth <= 3 levels.
+- Parallel negation: "Not X, but Y"
+- Tricolon overload: "A, B, and C" used repeatedly
+- Rhetorical Q + answer: "What does this mean? It means..."
+- Dramatic reveal openers: "Here's the thing", "The result?"
+- Mirror symmetry in consecutive lines
+- Overuse of em dashes
+- Every paragraph ending in tidy "lesson learned" phrasing
 
-### Release Size Heuristics
+#### Pass 3: Add Human Product Texture
 
-- **Minor / major milestone release**
-  - Include full structure with multiple domain blocks.
-  - `Highlights` usually 8-12 bullets.
-- **Weekly patch release**
-  - Keep full skeleton but reduce subsection count.
-  - `Highlights` usually 4-8 bullets.
-- **DB migration release**
-  - Keep concise.
-  - Must include `Migration overview`, operator impact, and rollback/backup note.
+- Lead with user-visible outcome, then explain mechanism.
+- Mix sentence lengths naturally.
+- Prefer straightforward phrasing over polished-but-empty language.
+- Keep confidence, but avoid launch-ad hype.
+- Write like a product team update, not a marketing page.
 
-### GitHub Release Changelog Template
+### Recommended Structure Blueprint
+
+Use this shape unless the user asks otherwise:
+
+1. `# 🚀 release: ...`
+2. One opening paragraph (2-4 sentences) that explains overall user impact.
+3. 2-4 narrative capability blocks (short headings optional):
+   - each block = user value + key capability
+4. `Improvements and fixes` / `体验优化与修复` with concise bullets
+5. `Credits` with required mention format
+
+### Length and Reading Density (Important)
+
+Avoid overly short release notes when the diff is substantial.
+
+- Weekly release PR body:
+  - Usually target 350-700 English words (or equivalent Chinese length)
+  - Keep 2-4 narrative sections, each with at least one real paragraph
+- Minor release PR body:
+  - Usually target 500-1000 English words (or equivalent Chinese length)
+  - Allow richer context and more concrete usage scenarios
+- DB migration release PR body:
+  - Keep concise, but still include context + impact + operator notes
+- If there are many commits, increase narrative depth before adding more bullets.
+- If there are few commits, stay concise and do not pad content.
+
+### Storytelling Contract (Major Capabilities)
+
+For each major capability, write in this order:
+
+1. Prior context/problem (briefly)
+2. What changed in this release
+3. Practical impact on user workflow
+
+Do not collapse major capability sections into one-line bullets.
+
+### Section Anatomy (Preferred)
+
+Each major section should follow this internal rhythm:
+
+1. Lead sentence: what changed and who benefits.
+2. Context sentence: what was painful, slow, or fragmented before.
+3. Mechanism paragraph: how the new behavior works in practice.
+4. Optional utility list (`Use X to:`) for actionable workflows.
+5. Optional availability closer when plan/platform constraints matter.
+
+This pattern increases readability and makes changelogs more enjoyable to read without sacrificing precision.
+
+### Section and Heading Heuristics
+
+- Keep heading count low (typically 3-5).
+- Weekly release PR body target:
+  - 1 opening paragraph
+  - 2-4 major narrative sections
+  - 1 improvements/fixes section
+  - 1 credits section
+- Never produce heading-per-bullet layout.
+- If a section has 4+ bullets, convert into 2-3 short narrative paragraphs when possible.
+
+### Linear-Style Block Pattern
+
+Use this pattern when writing major sections:
 
 ```md
-# 🚀 LobeHub v<x.y.z> (<YYYYMMDD>)
+## <Capability name>
 
-**Release Date:** <Month DD, YYYY>  
-**Since <Previous Version>:** <N commits> · <N merged PRs> · <N resolved issues> · <N contributors>
+<One sentence: what users can do now and why it matters.>
 
-> <One release thesis sentence: what this release unlocks in practice.>
+<One short paragraph: how this works in practice, in plain language.>
 
----
+<Optional list for workflows>
+Use <feature> to:
+- <practical action 1>
+- <practical action 2>
+- <practical action 3>
 
-## ✨ Highlights
-
-- **<Capability A>** — <What changed and why it matters>. (#1234)
-- **<Capability B>** — <What changed and why it matters>. (#2345)
-- **<Capability C>** — <What changed and why it matters>. (#3456)
-
----
-
-## 🏗️ Core Product & Architecture
-
-### <Subdomain>
-
-- <Concrete change + impact>. (#...)
-- <Concrete change + impact>. (#...)
-
----
-
-## 📱 Platforms / Integrations
-
-- <Platform update + impact>. (#...)
-- <Compatibility/reliability fix + impact>. (#...)
-
----
-
-## 🖥️ CLI & User Experience
-
-- <User-facing workflow improvement>. (#...)
-- <Quality-of-life fix>. (#...)
-
----
-
-## 🔧 Tooling
-
-- <Tool/runtime improvement>. (#...)
-
----
-
-## 🔒 Security & Reliability
-
-- **Security:** <hardening or vulnerability fix>. (#...)
-- **Reliability:** <stability/performance behavior improvement>. (#...)
-
----
-
-## 👥 Contributors
-
-**<N merged PRs>** from **<N contributors>** across **<N commits>**.
-
-### Community Contributors
-
-- @<username> - <notable contribution area>
-- @<username> - <notable contribution area>
-
----
-
-**Full Changelog**: <previous_tag>...<current_tag>
+<Optional availability sentence>
 ```
+
+### Notion-Style Readability Moves
+
+Apply these moves when appropriate:
+
+- Use one clear "scene" sentence to ground context (for example, what a team is doing when the feature helps).
+- Alternate paragraph lengths: one compact paragraph followed by a denser explanatory one.
+- Prefer specific nouns (`triage inbox`, `topic switch`, `mobile session`) over broad terms like "experience" or "workflow improvements".
+- Keep transitions natural (`Previously`, `Now`, `In practice`, `This means`) and avoid ornate writing.
+- End key sections with a practical takeaway sentence, not a slogan.
+
+### Anti-Pattern Red Flags (Rewrite Required)
+
+- "Key Updates" followed by only bullets and no narrative context
+- One bullet per feature with no prior context or user impact
+- Repeated template like "Feature X: did Y"
+- Heading-per-feature with no explanatory paragraph
+- Mechanical transitions with no causal flow
+
+### EN/ZH Synchronization Rules
+
+- Keep section order aligned.
+- Keep facts and scope aligned.
+- Localize naturally; avoid literal sentence mirroring.
+- If one language uses bullets for a section, the other should match style intent.
+
+### Writing Tips
+
+- **User-facing**: Describe changes that users can perceive, not internal implementation details
+- **Clear categories**: Group by features, models/providers, desktop, stability/fixes, etc.
+- **Highlight key items**: Use `**bold**` for important feature names
+- **Credit contributors**: Collect all committers via `git log` and list alphabetically
+- **Flexible categories**: Choose categories based on actual changes — no need to force-fit all categories
+- **Terminology enforcement**: Ensure wording follows `microcopy` skill terminology and tone constraints
+- **Linear narrative enforcement**: Follow capability -> explanation -> optional "Use X to" list
+- **Storytelling enforcement**: For major updates, write in "before -> now -> impact" order
+- **Depth enforcement**: If the diff is non-trivial, prefer complete paragraphs over compressed bullet-only summaries
+- **Pleasure-to-read enforcement**: Include concrete examples and practical scenarios so readers can imagine using the capability
 
 ### Quick Checklist
 
-- [ ] Uses top metadata and a clear release thesis
-- [ ] Includes `Highlights` plus domain-grouped sections
-- [ ] Every major bullet states both change and user/operator impact
-- [ ] Security and reliability updates are explicitly surfaced (when present)
-- [ ] Contributor credits and compare range are included
-- [ ] All numbers and claims are verifiable
+- [ ] First paragraph explains user-visible release outcome
+- [ ] Heading count is minimal and meaningful
+- [ ] Major capabilities are short narrative paragraphs, not only bullets
+- [ ] Includes "before -> now -> impact" for major sections
+- [ ] No obvious AI patterns (parallel negation, rhetorical Q/A, dramatic reveal)
+- [ ] Vocabulary is plain, direct, and product-credible
+- [ ] Improvements/fixes remain concise and scannable
+- [ ] Credits format is preserved exactly
+- [ ] EN/ZH versions align in facts and order
