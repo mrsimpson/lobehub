@@ -364,7 +364,7 @@ describe('convertOpenAIResponseInputs', () => {
 
     expect(result).toEqual([
       { role: 'user', content: 'Hello' },
-      { role: 'assistant', content: 'Hi there!' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Hi there!' }] },
     ]);
   });
 
@@ -670,7 +670,11 @@ describe('convertOpenAIResponseInputs', () => {
     // NOT fall through to the default builder which would spread tool_calls back.
     expect(result).toEqual([
       { role: 'user', content: 'Do something' },
-      { role: 'assistant', content: 'Final answer' },
+      {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'Final answer' }],
+      },
     ]);
   });
 
@@ -692,7 +696,7 @@ describe('convertOpenAIResponseInputs', () => {
       { content: 'system prompts', role: 'developer' },
       { content: '你好', role: 'user' },
       { summary: [{ text: 'reasoning content', type: 'summary_text' }], type: 'reasoning' },
-      { content: 'hello', role: 'assistant' },
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }] },
       { content: '杭州天气如何', role: 'user' },
     ]);
   });
@@ -727,7 +731,11 @@ describe('convertOpenAIResponseInputs', () => {
         role: 'user',
       },
       { summary: [{ text: 'analyzing the image', type: 'summary_text' }], type: 'reasoning' },
-      { content: 'The image shows a green car.', role: 'assistant' },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'The image shows a green car.' }],
+      },
       { content: '1 + 1 = ?', role: 'user' },
     ]);
   });
@@ -773,6 +781,7 @@ describe('convertOpenAIResponseInputs', () => {
         type: 'reasoning',
       },
       {
+        type: 'message',
         content: [{ text: '我是 Claude', type: 'output_text' }],
         role: 'assistant',
       },

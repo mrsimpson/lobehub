@@ -195,9 +195,15 @@ export const convertOpenAIResponseInputs = async (
       // default item
       // also need handle image
 
+      const isAssistant = message.role === 'assistant';
+
       const processedContent =
         typeof message.content === 'string'
-          ? message.content
+          ? isAssistant
+            ? // Responses API requires assistant content as [{type:'output_text', text:...}]
+              // so that providers like llama.cpp can recognise the item as an output message
+              [{ text: message.content, type: 'output_text' }]
+            : message.content
           : await Promise.all(
               (message.content || []).map(async (c) => {
                 if (isInternalThinkingContentPart(c as OpenAICompatibleContentPart)) {
@@ -207,7 +213,7 @@ export const convertOpenAIResponseInputs = async (
                 if (c.type === 'text') {
                   // if assistant message, set type to output_text
                   // https://platform.openai.com/docs/guides/text
-                  if (message.role === 'assistant') {
+                  if (isAssistant) {
                     return { ...c, type: 'output_text' };
                   }
                   return { ...c, type: 'input_text' };
@@ -242,6 +248,11 @@ export const convertOpenAIResponseInputs = async (
           typeof processedContent === 'string'
             ? processedContent
             : processedContent.filter((m) => m !== undefined),
+        // Responses API requires 'type: message' on assistant items so that
+        // providers (including llama.cpp) can identify them as output messages.
+        // Without this field the server cannot determine the item type and
+        // returns 400 "Cannot determine type of 'item'".
+        ...(isAssistant && { type: 'message' }),
       } as OpenAI.Responses.ResponseInputItem;
 
       // remove reasoning field from the message item
