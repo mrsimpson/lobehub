@@ -3,18 +3,30 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import ModeSwitch from './ModeSwitch';
+
+const mockConfig = vi.hoisted(() => ({ agentOnboardingEnabled: true }));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) =>
-      ({
-        'agent.modeSwitch.agent': 'Conversational',
-        'agent.modeSwitch.classic': 'Classic',
-        'agent.modeSwitch.label': 'Choose your onboarding mode',
-      })[key] || key,
+      (
+        ({
+          'agent.modeSwitch.agent': 'Conversational',
+          'agent.modeSwitch.classic': 'Classic',
+          'agent.modeSwitch.label': 'Choose your onboarding mode',
+        }) as Record<string, string>
+      )[key] || key,
   }),
 }));
 
-const renderModeSwitch = async ({
+vi.mock('@/routes/onboarding/config', () => ({
+  get AGENT_ONBOARDING_ENABLED() {
+    return mockConfig.agentOnboardingEnabled;
+  },
+}));
+
+const renderModeSwitch = ({
   actions,
   enabled,
   entry = '/onboarding/agent',
@@ -25,12 +37,7 @@ const renderModeSwitch = async ({
   entry?: string;
   showLabel?: boolean;
 }) => {
-  vi.resetModules();
-  vi.doMock('@/routes/onboarding/config', () => ({
-    AGENT_ONBOARDING_ENABLED: enabled,
-  }));
-
-  const { default: ModeSwitch } = await import('./ModeSwitch');
+  mockConfig.agentOnboardingEnabled = enabled;
 
   render(
     <MemoryRouter initialEntries={[entry]}>
@@ -41,7 +48,7 @@ const renderModeSwitch = async ({
 
 afterEach(() => {
   cleanup();
-  vi.doUnmock('@/routes/onboarding/config');
+  mockConfig.agentOnboardingEnabled = true;
 });
 
 // Each test does vi.resetModules() + dynamic import of the component, which
@@ -50,10 +57,8 @@ afterEach(() => {
 const TEST_TIMEOUT_MS = 15_000;
 
 describe('ModeSwitch', () => {
-  it(
-    'renders both onboarding variants when agent onboarding is enabled',
-    async () => {
-      await renderModeSwitch({ enabled: true, showLabel: true });
+  it('renders both onboarding variants when agent onboarding is enabled', () => {
+    renderModeSwitch({ enabled: true, showLabel: true });
 
       expect(screen.getByText('Choose your onboarding mode')).toBeInTheDocument();
       expect(screen.getByRole('radio', { name: 'Conversational' })).toBeChecked();
@@ -62,10 +67,8 @@ describe('ModeSwitch', () => {
     TEST_TIMEOUT_MS,
   );
 
-  it(
-    'hides the onboarding switch entirely when agent onboarding is disabled',
-    async () => {
-      await renderModeSwitch({ enabled: false });
+  it('hides the onboarding switch entirely when agent onboarding is disabled', () => {
+    renderModeSwitch({ enabled: false });
 
       expect(screen.queryByRole('radio', { name: 'Conversational' })).not.toBeInTheDocument();
       expect(screen.queryByRole('radio', { name: 'Classic' })).not.toBeInTheDocument();
@@ -74,8 +77,8 @@ describe('ModeSwitch', () => {
     TEST_TIMEOUT_MS,
   );
 
-  it('keeps action buttons visible when agent onboarding is disabled', async () => {
-    await renderModeSwitch({
+  it('keeps action buttons visible when agent onboarding is disabled', () => {
+    renderModeSwitch({
       actions: <button type="button">Restart</button>,
       enabled: false,
     });
