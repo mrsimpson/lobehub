@@ -53,7 +53,7 @@ const openaiApiKey = cfg.getSecret('openaiApiKey');
 const openrouterApiKey = cfg.requireSecret('openrouterApiKey');
 const anthropicApiKey = cfg.getSecret('anthropicApiKey');
 
-// Memory / embeddings — opt-in
+// Memory / embeddings — opt-in; requires bge-m3 on flinker:8080
 const enableMemory = cfg.getBoolean('enableMemory') ?? false;
 
 // GitHub OAuth — required for SSO login
@@ -168,13 +168,14 @@ const baseEnv: { name: string; value: string | pulumi.Output<string> }[] = [
   // Memory / embeddings — controlled by lobehub:enableMemory config flag
   ...(enableMemory
     ? [
-        { name: 'MEMORY_USER_MEMORY_EMBEDDING_BASE_URL', value: 'http://flinker:8081/v1' },
-        { name: 'MEMORY_USER_MEMORY_EMBEDDING_MODEL', value: 'nomic-embed-text-v1.5.Q8_0.gguf' },
-        { name: 'MEMORY_USER_MEMORY_EMBEDDING_PROVIDER', value: 'openai' },
-        { name: 'MEMORY_USER_MEMORY_EMBEDDING_API_KEY', value: 'sk-dummy' },
+        // bge-m3 served via lmstudio provider — no API key required.
+        // lmstudio avoids the InvalidProviderAPIKey error that openai raises on dummy keys.
+        { name: 'MEMORY_USER_MEMORY_EMBEDDING_BASE_URL', value: 'http://flinker:8080/v1' },
+        { name: 'MEMORY_USER_MEMORY_EMBEDDING_MODEL', value: 'bge-m3' },
+        { name: 'MEMORY_USER_MEMORY_EMBEDDING_PROVIDER', value: 'lmstudio' },
         {
           name: 'DEFAULT_FILES_CONFIG',
-          value: 'embedding_model=openai/nomic-embed-text-v1.5.Q8_0.gguf',
+          value: 'embedding_model=lmstudio/bge-m3',
         },
       ]
     : [{ name: 'ENABLED_KNOWLEDGE_BASE', value: '0' }]),
