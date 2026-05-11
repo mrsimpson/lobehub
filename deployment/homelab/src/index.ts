@@ -1,7 +1,6 @@
 import * as pulumi from '@pulumi/pulumi';
 import * as k8s from '@pulumi/kubernetes';
-import * as random from '@pulumi/random';
-import { AuthType, createHomelabContextFromStack } from '@mrsimpson/homelab-core-components';
+import { AuthType, createHomelabContextFromStack, PostgresInstance } from '@mrsimpson/homelab-core-components';
 import { fetchFreeModelList, fetchFlinkerModelList } from './models';
 
 // ---------------------------------------------------------------------------
@@ -10,15 +9,8 @@ import { fetchFreeModelList, fetchFlinkerModelList } from './models';
 
 const APP_NAME = 'lobehub';
 const NAMESPACE = APP_NAME;
-// lobehub runtime image exposes port 3210 (see root Dockerfile: ENV PORT="3210")
 const APP_PORT = 3210;
-const PG_PORT = 5432;
 const PG_DB = 'lobehub';
-const PG_USER = 'postgres';
-// paradedb = Postgres 17 with pgvector + search_path extensions preloaded.
-// lobehub requires pgvector, so the stock postgres image won't work.
-const PG_IMAGE = 'paradedb/paradedb:latest-pg17';
-const PG_STORAGE_CLASS = 'longhorn-uncritical';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -53,8 +45,7 @@ const s3SecretAccessKey = cfg.requireSecret('s3SecretAccessKey');
 const s3Endpoint = cfg.require('s3Endpoint');
 const s3Bucket = cfg.require('s3Bucket');
 
-// Optional: external DATABASE_URL override. When set, the in-cluster Postgres
-// StatefulSet is skipped and the app points at the provided URL.
+// Optional: external DATABASE_URL override — skips in-cluster Postgres when set.
 const externalDatabaseUrl = cfg.getSecret('databaseUrl');
 
 // Optional provider API keys — added to the env only when set
@@ -62,7 +53,7 @@ const openaiApiKey = cfg.getSecret('openaiApiKey');
 const openrouterApiKey = cfg.requireSecret('openrouterApiKey');
 const anthropicApiKey = cfg.getSecret('anthropicApiKey');
 
-// Memory / embeddings — opt-in; requires nomic-embed-text-v1.5 on flinker:8081
+// Memory / embeddings — opt-in
 const enableMemory = cfg.getBoolean('enableMemory') ?? false;
 
 // GitHub OAuth — required for SSO login
@@ -91,138 +82,31 @@ const ns = new k8s.core.v1.Namespace(`${APP_NAME}-ns`, {
 });
 
 // ---------------------------------------------------------------------------
-// 2. In-cluster Postgres (paradedb) — optional; skipped when externalDatabaseUrl is set
+// 2. In-cluster Postgres (paradedb via CNPG) — optional; skipped when externalDatabaseUrl is set
 // ---------------------------------------------------------------------------
 
-const deployInCluster = externalDatabaseUrl === undefined;
-
-const pgPassword = new random.RandomPassword(
-  `${APP_NAME}-pg-password`,
-  { length: 32, special: false },
-  { retainOnDelete: true },
-);
-
-const pgServiceHost = `${APP_NAME}-postgres`;
-const pgConnectionUrl = pulumi.interpolate`postgres://${PG_USER}:${pgPassword.result}@${pgServiceHost}:${PG_PORT}/${PG_DB}`;
-
-const pgSecret = deployInCluster
-  ? new k8s.core.v1.Secret(
-      `${APP_NAME}-postgres-credentials`,
-      {
-        metadata: {
-          name: `${APP_NAME}-postgres-credentials`,
-          namespace: NAMESPACE,
-          labels: { app: APP_NAME, component: 'postgres' },
-        },
-        type: 'Opaque',
-        stringData: {
-          POSTGRES_DB: PG_DB,
-          POSTGRES_USER: PG_USER,
-          POSTGRES_PASSWORD: pgPassword.result,
-        },
-      },
-      { dependsOn: [ns] },
-    )
+const db = externalDatabaseUrl === undefined
+  ? new PostgresInstance(`${APP_NAME}-db`, {
+      namespace: ns,
+      databaseName: PG_DB,
+      image: 'paradedb/paradedb:18-v0.23.4',
+      storageSize: dbStorageSize,
+      storageClass: 'longhorn-persistent',
+      postgresUID: 999,
+      postgresGID: 999,
+      // pg_search and pg_cron must be preloaded; pg_stat_statements for observability.
+      sharedPreloadLibraries: ['pg_search', 'pg_cron', 'pg_stat_statements'],
+      // Pre-install as superuser so app migrations (CREATE EXTENSION IF NOT EXISTS)
+      // are no-ops — the app user never needs superuser privileges.
+      postInitApplicationSQL: [
+        'CREATE EXTENSION IF NOT EXISTS vector',
+        'CREATE EXTENSION IF NOT EXISTS pg_search',
+      ],
+    })
   : undefined;
 
-const pgService = deployInCluster
-  ? new k8s.core.v1.Service(
-      `${APP_NAME}-postgres-svc`,
-      {
-        metadata: {
-          name: pgServiceHost,
-          namespace: NAMESPACE,
-          labels: { app: APP_NAME, component: 'postgres' },
-        },
-        spec: {
-          type: 'ClusterIP',
-          ports: [{ name: 'postgres', port: PG_PORT, targetPort: PG_PORT }],
-          selector: { component: 'postgres' },
-        },
-      },
-      { dependsOn: [ns] },
-    )
-  : undefined;
-
-const pgStatefulSet = deployInCluster
-  ? new k8s.apps.v1.StatefulSet(
-      `${APP_NAME}-postgres`,
-      {
-        metadata: {
-          name: `${APP_NAME}-postgres`,
-          namespace: NAMESPACE,
-          labels: { app: APP_NAME, component: 'postgres' },
-        },
-        spec: {
-          serviceName: pgServiceHost,
-          replicas: 1,
-          selector: { matchLabels: { component: 'postgres' } },
-          template: {
-            metadata: { labels: { component: 'postgres' } },
-            spec: {
-              securityContext: {
-                runAsNonRoot: true,
-                runAsUser: 999,
-                runAsGroup: 999,
-                fsGroup: 999,
-                seccompProfile: { type: 'RuntimeDefault' },
-              },
-              containers: [
-                {
-                  name: 'postgres',
-                  image: PG_IMAGE,
-                  ports: [{ name: 'postgres', containerPort: PG_PORT }],
-                  envFrom: [{ secretRef: { name: `${APP_NAME}-postgres-credentials` } }],
-                  env: [
-                    // paradedb image writes into /var/lib/postgresql/data by default;
-                    // use a subdir so lost+found in the mount root doesn't break initdb.
-                    { name: 'PGDATA', value: '/var/lib/postgresql/data/pgdata' },
-                  ],
-                  volumeMounts: [{ name: 'data', mountPath: '/var/lib/postgresql/data' }],
-                  readinessProbe: {
-                    exec: { command: ['pg_isready', '-U', PG_USER, '-d', PG_DB] },
-                    initialDelaySeconds: 10,
-                    periodSeconds: 10,
-                    failureThreshold: 6,
-                  },
-                  livenessProbe: {
-                    exec: { command: ['pg_isready', '-U', PG_USER, '-d', PG_DB] },
-                    initialDelaySeconds: 30,
-                    periodSeconds: 30,
-                    failureThreshold: 6,
-                  },
-                  securityContext: {
-                    runAsNonRoot: true,
-                    allowPrivilegeEscalation: false,
-                    capabilities: { drop: ['ALL'] },
-                    seccompProfile: { type: 'RuntimeDefault' },
-                  },
-                  resources: {
-                    requests: { cpu: '100m', memory: '256Mi' },
-                    limits: { cpu: '1000m', memory: '1Gi' },
-                  },
-                },
-              ],
-            },
-          },
-          volumeClaimTemplates: [
-            {
-              metadata: { name: 'data' },
-              spec: {
-                accessModes: ['ReadWriteOnce'],
-                storageClassName: PG_STORAGE_CLASS,
-                resources: { requests: { storage: dbStorageSize } },
-              },
-            },
-          ],
-        },
-      },
-      { dependsOn: [pgService!, pgSecret!] },
-    )
-  : undefined;
-
-// DATABASE_URL — external override wins; otherwise use the in-cluster URL
-const databaseUrl: pulumi.Output<string> = externalDatabaseUrl ?? pgConnectionUrl;
+// DATABASE_URL — external override wins; otherwise read from CNPG adapter secret via connectionString
+const databaseUrl: pulumi.Output<string> = externalDatabaseUrl ?? db!.connectionString;
 
 // ---------------------------------------------------------------------------
 // 3. Secret — app env values (DB, auth)
@@ -252,12 +136,8 @@ const appSecret = new k8s.core.v1.Secret(
   { dependsOn: [ns] },
 );
 
-// GHCR pull secret is now auto-created by ExposedWebApp when imagePullSecrets
-// references "ghcr-pull-secret" — no manual ExternalSecret needed.
-
 // ---------------------------------------------------------------------------
 // 4. Env wiring — non-secret inline values + optional provider keys
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 
 const appDomain = pulumi.interpolate`${APP_NAME}.${domain}`;
@@ -288,7 +168,6 @@ const baseEnv: { name: string; value: string | pulumi.Output<string> }[] = [
   // Memory / embeddings — controlled by lobehub:enableMemory config flag
   ...(enableMemory
     ? [
-        // nomic-embed-text-v1.5 on flinker:8081 (separate llama-server instance)
         { name: 'MEMORY_USER_MEMORY_EMBEDDING_BASE_URL', value: 'http://flinker:8081/v1' },
         { name: 'MEMORY_USER_MEMORY_EMBEDDING_MODEL', value: 'nomic-embed-text-v1.5.Q8_0.gguf' },
         { name: 'MEMORY_USER_MEMORY_EMBEDDING_PROVIDER', value: 'openai' },
@@ -318,7 +197,7 @@ const providerEnv = [
 // ---------------------------------------------------------------------------
 
 const appDependsOn: pulumi.Resource[] = [appSecret];
-if (pgStatefulSet) appDependsOn.push(pgStatefulSet);
+if (db) appDependsOn.push(db);
 
 export const app = homelab.createExposedWebApp(
   APP_NAME,
@@ -372,4 +251,4 @@ export const app = homelab.createExposedWebApp(
 
 export const url = pulumi.interpolate`https://${appDomain}`;
 export const namespace = app.namespace.metadata.name;
-export const databaseHost = deployInCluster ? pgServiceHost : 'external';
+export const databaseHost = db ? db.host : pulumi.output('external');
