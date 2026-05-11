@@ -9,10 +9,9 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@mrsimpson/homelab-core-components": "0.1.2",
+    "@mrsimpson/homelab-core-components": "file:/var/folders/bh/cnw0kmkx3fd1vrdb61w72_780000gn/T/opencode/mrsimpson-homelab-core-components-0.2.1.tgz",
     "@pulumi/kubernetes": "^4.18.3",
-    "@pulumi/pulumi": "^3.137.0",
-    "@pulumi/random": "^4.16.7"
+    "@pulumi/pulumi": "^3.137.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
